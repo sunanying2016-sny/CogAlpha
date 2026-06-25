@@ -1,0 +1,26 @@
+dataset: CSI300
+horizon_days: 10
+return_price_column: open
+trade_delay_days: 1
+split:
+  train_start: 2011-01-01
+  train_end: 2019-12-31
+  valid_start: 2020-01-01
+  valid_end: 2020-12-31
+  test_start: 2021-01-01
+  test_end: 2024-12-01
+fitness_gate:
+  qualified_percentile: 0.65
+  elite_percentile: 0.80
+  qualified_minima:
+    ic: 0.005
+    rank_ic: 0.005
+    icir: 0.05
+    rank_icir: 0.05
+    mi: 0.02
+  elite_minima:
+    ic: 0.01
+    rank_ic: 0.01
+    icir: 0.1
+    rank_icir: 0.1
+    mi: 0.02

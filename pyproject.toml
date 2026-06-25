@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cogalpha"
+version = "0.1.0"
+description = "Skill-driven reproduction of Cognitive Alpha Mining via code-based evolution."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7",
+  "numpy>=2.0",
+  "pandas>=2.2",
+  "scipy>=1.13",
+  "ta-lib>=0.5",
+  "scikit-learn>=1.5",
+  "lightgbm>=4.6",
+  "huggingface-hub>=1.0",
+  "tables>=3.10",
+  "pyarrow>=16.0",
+  "pypdf>=5.0",
+]
+
+[project.optional-dependencies]
+qlib = [
+  "pyqlib>=0.9.7; python_version < '3.13'",
+]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "mypy>=1.11",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "perf: slow VAL-03 scaling perf guards over the real eval hot path (deselect with -m 'not perf'; run in isolation via 'pytest tests/test_hot_path_scaling.py')",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

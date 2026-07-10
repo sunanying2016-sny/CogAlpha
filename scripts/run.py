@@ -450,7 +450,15 @@ def _run_real(args: argparse.Namespace) -> RunResult:
 
     market = load_prepared_baseline_market_data(args.data_dir)
     split = market.test
-    label = split.forward_returns
+    # split.forward_returns is a wide (date rows x ticker columns) DataFrame; both
+    # train_combination_signal's label contract and its internal (date,ticker)
+    # boolean-mask slicing need the long MultiIndex-Series shape instead.
+    label = split.forward_returns.stack(future_stack=True)
+
+    import pandas as pd
+
+    benchmark_returns_path = Path(args.data_dir) / "benchmark_returns.parquet"
+    benchmark_returns = pd.read_parquet(benchmark_returns_path).iloc[:, 0]
 
     pool = AlphaExecPool(split.ohlcv_panel, concurrency=args.concurrency)
     try:
@@ -521,6 +529,7 @@ def _run_real(args: argparse.Namespace) -> RunResult:
                     split.ohlcv_panel,
                     label,
                     combined_signal=combined_signal,
+                    benchmark_returns=benchmark_returns,
                 )
                 backtest_metrics = final.model_dump()
             except ValueError as exc:  # elites present but none produced executable values

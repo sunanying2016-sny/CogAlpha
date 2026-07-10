@@ -47,6 +47,13 @@ compare CogAlpha's and QuantaAlpha's numbers, the date windows and labels are NO
 without explicit reconciliation; the code comments call this out as a hard invariant
 ("CogAlpha and QuantaAlpha settings must stay separate").
 
+A source-level architecture comparison against the local `/home/sunanying/QuantaAlpha` checkout
+(execution sandboxing, leakage detection, factor-admission philosophy, and a confirmed
+`topk`/`n_drop` drift between the `quantaalpha_csi300_ohlcv_v1` snapshot above and QuantaAlpha's
+current `configs/backtest.yaml`) is kept separately in `docs/quantaalpha-comparison.md` — that
+file will go stale as QuantaAlpha evolves independently, so treat it as a dated snapshot
+(2026-07-10), not a live fact.
+
 ## Setup
 
 ```bash
@@ -488,3 +495,35 @@ IR 1.8999等）——这份代码仓库自己承认还没有真实跑出过。`d
 LLM+真实数据validation-scale运行（216个候选）最终 `elite_pool=0`，没有回测。也就是说：**核心算法结构和
 超参数与论文高度吻合，但论文的实验结论这份代码还没有真实复现过**——这不算上面4点里的"未实施"（fitness/回测
 链路本身是完整实现的），而是"实施了但还没跑出过论文声称的效果"，性质不同，不要混为一谈。
+
+**2026-07-10 更新（重要，覆盖上一段的部分陈述）**：`docs/system-walkthrough.md` 那次 216 候选
+`elite_pool=0` 的记录，事后确认根因不是"五个指标门槛太高"，而是四个真实 bug 叠加导致候选因子从来没有机会
+被真正评估过：
+
+1. 四个质检 skill（`alpha-code-quality`/`alpha-judge`/`alpha-code-repair`/`alpha-logic-improvement`）的
+   prompt 一直是自由文本应答格式，但 `cogalpha/skill_runtime/verdict.py::parse_quality_verdict` 是严格
+   JSON 校验、fail-closed 到 REJECT——两边契约对不上，导致质检第一步 100% 必然拒绝，是一次"解析器升级了、
+   prompt 没跟着改"的半截迁移遗留问题。已修复：四个 skill 改成输出
+   `{"status": "accept"|"repair"|"reject", "reasons": [...]}`。
+2. 附带发现：`verdict.py` 里 `_JSON_OBJECT_RE` 正则实际是贪婪匹配（`\{.*\}`），但注释写的是"non-greedy"，
+   JSON 判决后面如果跟着代码块会被错误拼接导致解析失败。已修复为 `\{.*?\}`。
+3. `cogalpha/execution.py::execute_alpha_function` 假设 `groupby().apply()` 总是返回宽表 DataFrame 再
+   `.stack()`——这个假设只在所有股票日期覆盖完全一致时成立（比如 dry-run 用的合成数据）；真实市场数据里
+   不同股票有不同的上市/退市日期，日期覆盖天然不一致，pandas 会直接返回长格式 Series，`.stack()` 报错。
+   两个 bug（1+3）互相掩盖：之前唯一一次真实运行卡在 bug 1，从来没执行到会触发 bug 3 的地方；这大概率是
+   这个代码库第一次真正拿不规则真实市场数据去执行 LLM 生成的因子代码。已修复：判断实际返回类型再决定要不要
+   `.stack()`。
+4. `cogalpha/combination.py::train_combination_signal` 要求 `label` 是长格式 `(date,ticker)` 索引的
+   Series，但 `scripts/run.py` 传入的是 `split.forward_returns`（宽表 DataFrame，日期为行、股票为列）
+   ——同样是从未被真实数据触发过的路径。已修复：调用前 `.stack(future_stack=True)`。另外
+   `scripts/run.py` 调 `finalize()` 时从未传 `benchmark_returns`，导致 `annualized_excess_return`/
+   `information_ratio` 一直是空值（不是策略没有超额收益，是基准收益从来没被接进这条调用链）。已修复：
+   加载 `<data-dir>/benchmark_returns.parquet` 并传入。
+
+四个 bug 全部修复后，2026-07-10 第一次真正跑通端到端全流程（`--real --provider deepseek`，6 agent × 6代，
+`ProtocolConfig` 的 `--real` 默认规模），产出真实非空结果：`elite_pool=2, qualified_pool=6`，
+`combined_signal` 594317 个 (date,ticker) 点，回测 `annualized_excess_return≈9.93%,
+information_ratio≈0.468`（远低于论文 Table 1 的 IR 1.8999——这在预期内，这次只用了 6 个 agent/6 代，不是
+论文的 21 agent/24 代满血配置）。**这不代表复现了论文的实验结论，但代表整条"生成→质检→进化→fitness→
+组合训练→回测"链路第一次被真实证明能跑通、产出诚实的非零结果**——在这之前，从 `docs/system-walkthrough.md`
+到这次会话前几次尝试，从来没有一次真正走到 `finalize()` 这一步。

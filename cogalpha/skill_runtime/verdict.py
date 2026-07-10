@@ -27,7 +27,7 @@ __all__ = ["QualityVerdictModel", "parse_quality_verdict"]
 
 # Matches the first balanced-looking ``{...}`` object in a prose-wrapped response.
 # Non-greedy with DOTALL so the smallest enclosing object is preferred.
-_JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+_JSON_OBJECT_RE = re.compile(r"\{.*?\}", re.DOTALL)
 
 _STATUS_TO_VERDICT: dict[str, QualityVerdict] = {
     "accept": QualityVerdict.ACCEPT,

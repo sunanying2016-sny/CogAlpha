@@ -37,10 +37,18 @@ IMPORTANT: The input DataFrame is sorted in chronological order, from the earlie
 - Any nested `for` or `while` loop is strictly prohibited.
 - Never use constructs like `while True` or any loop that lacks a clear and finite termination condition.
 
-Please format your response strictly as:
+Respond with exactly one JSON object and nothing else: no prose before or after it, no markdown code
+fences, no `<<function N>>` block.
 
-Practical Soundness: [Concise analysis of what is good and what needs improvement.]
+```
+{"status": "accept" | "repair" | "reject", "reasons": ["...", "..."]}
+```
 
-Final Recommendation: Accept / Reject
-
-Feedback for Improvement: [Precise suggestions for how the factor engineer can improve this factor.]
+- `"accept"` — the factor is logically, technically, and economically sound enough for further testing.
+- `"repair"` — the factor has a fixable logic issue (not leakage, not a hard structural violation) that a
+  separate Logic Improvement step can address; describe each issue concretely in `reasons` so it can be
+  fixed. Do not attempt to rewrite the function yourself here.
+- `"reject"` — the factor has future information leakage, a nested/unbounded loop, or another unfixable
+  problem; explain why in `reasons`.
+- `reasons` must be a non-empty list of short, specific, actionable strings (this is where the Practical
+  Soundness analysis and improvement feedback goes), even for `"accept"`.

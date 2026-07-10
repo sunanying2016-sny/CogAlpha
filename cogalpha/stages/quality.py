@@ -77,7 +77,7 @@ class _CandidateOutcome:
     """One candidate's A.3 result: accepted XOR rejected, plus the skills invoked."""
 
     accepted: AlphaCandidate | None
-    rejected_id: str | None
+    rejected: AlphaCandidate | None
     invoked_skills: list[str]
 
 
@@ -162,8 +162,8 @@ class QualityStageImpl:
         outcomes = ordered_map(tasks, concurrency=self._concurrency)
 
         accepted: list[AlphaCandidate] = []
+        rejected: list[AlphaCandidate] = []
         records: list[InvocationRecord] = []
-        rejected_ids: list[str] = []
         for candidate, outcome in zip(candidates, outcomes, strict=True):
             for skill_name in outcome.invoked_skills:
                 records.append(
@@ -172,7 +172,7 @@ class QualityStageImpl:
             if outcome.accepted is not None:
                 accepted.append(outcome.accepted)
             else:
-                rejected_ids.append(outcome.rejected_id or candidate.candidate_id)
+                rejected.append(outcome.rejected or candidate)
 
         # The stage owns its filtering side-effect (CR-01): quality is a real FILTER,
         # so it both routes rejects to ``rejected_pool`` AND prunes them out of
@@ -180,9 +180,11 @@ class QualityStageImpl:
         # The orchestrator's ``_merge`` is purely additive (skips same-id stores), so
         # without this prune the rejected/leaking ids would stay in ``candidate_pool``
         # and fitness would score the unfiltered pool (the §3.3/§3.6 honesty bypass).
-        # We also write the quality-tagged (ACCEPTED_BY_QUALITY) copy back into the
-        # store for each survivor, since ``_merge`` would otherwise drop that lifecycle
-        # tag (the accepted id already lives in the store from generation).
+        # We also write the quality-tagged (ACCEPTED_BY_QUALITY / REJECTED_BY_QUALITY)
+        # copy back into the store for every candidate, since ``_merge`` would otherwise
+        # drop that lifecycle tag (the id already lives in the store from generation) and
+        # checkpoints would show the stale pre-quality ``stage`` for every reject.
+        rejected_ids = [candidate.candidate_id for candidate in rejected]
         rejected_set = set(rejected_ids)
         state.candidate_pool = [
             candidate_id
@@ -190,6 +192,8 @@ class QualityStageImpl:
             if candidate_id not in rejected_set
         ]
         for candidate in accepted:
+            state.store[candidate.candidate_id] = candidate
+        for candidate in rejected:
             state.store[candidate.candidate_id] = candidate
         state.rejected_pool.extend(rejected_ids)
         return accepted, records
@@ -201,7 +205,7 @@ class QualityStageImpl:
         except Exception:  # noqa: BLE001 - isolate one bad LLM artifact (Phase-20-ready)
             return _CandidateOutcome(
                 accepted=None,
-                rejected_id=candidate.candidate_id,
+                rejected=record_quality_rejection(candidate),
                 invoked_skills=invoked,
             )
 
@@ -247,7 +251,7 @@ class QualityStageImpl:
 
         return _CandidateOutcome(
             accepted=record_quality_acceptance(current),
-            rejected_id=None,
+            rejected=None,
             invoked_skills=invoked,
         )
 
@@ -320,12 +324,11 @@ class QualityStageImpl:
 
     @staticmethod
     def _reject(candidate: AlphaCandidate, invoked: list[str]) -> _CandidateOutcome:
-        # record_quality_rejection marks the stage; the id-ref is what the pool stores.
         # ``invoked`` carries the skills run before rejection so their InvocationRecords
         # are still emitted (the candidate→skill linkage is not lost on a reject).
-        record_quality_rejection(candidate)
+        tagged = record_quality_rejection(candidate)
         return _CandidateOutcome(
-            accepted=None, rejected_id=candidate.candidate_id, invoked_skills=list(invoked)
+            accepted=None, rejected=tagged, invoked_skills=list(invoked)
         )
 
 

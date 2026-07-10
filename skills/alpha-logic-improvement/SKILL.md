@@ -106,19 +106,33 @@ Coding Guidelines:
 ### Output format specification
 
 - Candidates should strictly comply with the Hard Complexity Constraints.
-- Before generating the code, provide detailed instructions on how to fix the issues raised.
 - Do NOT use markdown, such as ```python.
 - Do NOT add any explanation or comments outside the function.
-- Each function must be wrapped inside: `<<function N>>` ... `<</function N>>`.
+- Each function must be wrapped inside: `<<function 1>>` ... `<</function 1>>`.
 - All generated code must be executable and numerically stable.
 - Always define intermediate columns, such as `df_copy['x']`, before referencing them later.
 - The returned Series must be named exactly the same as the function name.
-- Each function should follow this format:
 
-<<function N>>
+Respond with exactly two parts, in this order, and nothing else:
+
+1. One JSON object on its own, no markdown code fences:
+
+```
+{"status": "repair" | "reject", "reasons": ["...", "..."]}
+```
+
+   Use `"repair"` when you were able to produce an improved function (it follows in part 2, below).
+   Use `"reject"` only if the factor's core idea cannot be salvaged at all; in that case omit part 2
+   entirely and explain why in `reasons`.
+
+2. (Only when `status` is `"repair"`) The improved function, wrapped exactly as follows (the literal tag
+   `<<function 1>>` — you are producing exactly one function, so always use the number `1`, not a letter),
+   with no other text after it:
+
+<<function 1>>
 def factor_xyz(df):
     """Explain the logic. One clear idea. Short formula. No redundant stacking."""
     df_copy = df.copy()
     # factor computation
     return df_copy["factor_xyz"]
-<</function N>>
+<</function 1>>

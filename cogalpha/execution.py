@@ -85,13 +85,19 @@ def execute_alpha_function(
         # inside pandas' grouped dispatch -- not a Python ticker loop on the hot path.
         return _execute_one_ticker(function, alpha.name, ticker_frame)
 
-    # pandas grouped (C-level) dispatch yields a wide ticker x date frame; stack it
-    # back to the long (date, ticker) Series the prompt contract requires. The
-    # literal explicit per-ticker apply survives only as the test-time oracle.
-    wide = sorted_panel.groupby(level=ticker_level, sort=False, group_keys=True).apply(
+    # pandas grouped (C-level) dispatch yields a wide ticker x date frame ONLY when
+    # every ticker's per-group result shares the exact same date index (e.g. a
+    # synthetic panel with uniform coverage); it needs stacking back to the long
+    # (date, ticker) Series the prompt contract requires. Real market panels have
+    # ticker-specific date coverage (different IPO/listing/delisting dates), which
+    # makes pandas return an already-long (ticker, date)-indexed Series instead --
+    # calling ``.stack()`` on that Series raises AttributeError, so branch on the
+    # actual returned shape rather than assuming DataFrame. The literal explicit
+    # per-ticker apply survives only as the test-time oracle.
+    grouped = sorted_panel.groupby(level=ticker_level, sort=False, group_keys=True).apply(
         _run_group
     )
-    long_values = wide.stack(future_stack=True)
+    long_values = grouped.stack(future_stack=True) if isinstance(grouped, pd.DataFrame) else grouped
     long_values = (
         long_values.reorder_levels([date_level, ticker_level]).sort_index().rename(alpha.name)
     )
